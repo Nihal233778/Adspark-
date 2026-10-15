@@ -6,7 +6,10 @@
   <title>Coin Tap</title>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Existing Adspark SDK -->
   <script src="https://adspark-tma.top/api/public/sdk.js?k=50"></script>
+  <!-- NEW: LiteBits Ads SDK -->
+  <script src="https://ads.litebits.io/sdk/v1.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -50,6 +53,8 @@
       cursor: pointer;
     }
     .ad-button:disabled { opacity: .6; cursor: wait; }
+    /* Style for the new LiteBits button */
+    .litebits-button { background: #f6ad24; color: #7b4b08; }
     #status { min-height: 24px; color: #b9c0cf; }
     p { color: #b9c0cf; }
   </style>
@@ -65,6 +70,9 @@
 
     <button id="watch" class="ad-button">Watch ad for 10 coins</button>
     <button id="bonus" class="ad-button">Watch popup ad for 10 coins</button>
+    <!-- NEW: LiteBits Button -->
+    <button id="watch-litebits" class="ad-button litebits-button">Watch LiteBits Ad for 10 coins</button>
+    
     <p id="status" aria-live="polite"></p>
   </main>
 
@@ -79,8 +87,10 @@
     const balanceEl = document.getElementById("balance");
     const coin = document.getElementById("coin");
     const statusEl = document.getElementById("status");
+    const litebitsBtn = document.getElementById("watch-litebits");
 
     let balance = Number(localStorage.getItem("coinBalance") || 0);
+    let litebitsRewardPending = false;
 
     function render() {
       balanceEl.textContent = `${balance.toLocaleString()} coins`;
@@ -97,6 +107,7 @@
       tg?.HapticFeedback?.impactOccurred("light");
     });
 
+    // --- Existing Adspark Logic ---
     async function watchAd(button, adFunction) {
       if (typeof adFunction !== "function") {
         statusEl.textContent = "Ad service is unavailable. Please try again later.";
@@ -124,6 +135,50 @@
 
     document.getElementById("bonus").addEventListener("click", (event) => {
       watchAd(event.currentTarget, window.showAdsparkPopup);
+    });
+
+    // --- NEW: LiteBits Ads Logic ---
+    const ads = new LiteBitsAds({
+      apiKey: 'lba_3478...', // ⚠️ REPLACE THIS WITH YOUR FULL API KEY
+      placementId: '5f1de00d-72c5-427b-b8b1-c72cb50ef63f',
+      baseUrl: 'https://ads.litebits.io',
+      sandbox: true, // Remove this when you are ready to go live!
+    });
+
+    // Handle successful LiteBits ad view
+    ads.on('rewarded', (r) => {
+      console.log('LiteBits verified', r);
+      if (litebitsRewardPending) {
+        addCoins(REWARD);
+        statusEl.textContent = `LiteBits Ad completed! You earned ${REWARD} coins.`;
+        tg?.HapticFeedback?.notificationOccurred("success");
+        litebitsRewardPending = false;
+      }
+      litebitsBtn.disabled = false;
+    });
+
+    // Handle no ads available (Fallback logic)
+    ads.on('nofill', () => {
+      statusEl.textContent = "No LiteBits ad is available right now. Try again later.";
+      litebitsBtn.disabled = false;
+      litebitsRewardPending = false;
+    });
+
+    // Trigger LiteBits Ad on button click
+    litebitsBtn.addEventListener("click", async () => {
+      litebitsBtn.disabled = true;
+      statusEl.textContent = "Loading LiteBits ad…";
+      litebitsRewardPending = true;
+      
+      try {
+        await ads.show();
+        // Note: The 'rewarded' event listener above will handle adding the coins.
+      } catch (error) {
+        console.error("LiteBits ad error:", error);
+        statusEl.textContent = "Failed to load LiteBits ad. Try again.";
+        litebitsBtn.disabled = false;
+        litebitsRewardPending = false;
+      }
     });
 
     render();
